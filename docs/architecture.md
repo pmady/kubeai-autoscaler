@@ -11,29 +11,29 @@ KubeAI Autoscaler is a Kubernetes-native solution for dynamically scaling AI inf
 │                           KubeAI Autoscaler System                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  ┌──────────────────┐    ┌──────────────────┐    ┌────────────────────────┐│
-│  │                  │    │                  │    │                        ││
-│  │  CRDs            │    │  Controller      │    │  Custom Metrics        ││
-│  │                  │───▶│                  │◀───│  Adapter               ││
-│  │  AIInference     │    │  - Reconciler    │    │                        ││
-│  │  AutoscalerPolicy│    │  - Scaler        │    │  - GPU Metrics         ││
-│  │                  │    │  - Metrics Fetch │    │  - Latency Metrics     ││
-│  │                  │    │                  │    │  - Queue Depth         ││
-│  └──────────────────┘    └────────┬─────────┘    └───────────┬────────────┘│
-│                                   │                          │             │
-│                                   │                          │             │
-│                                   ▼                          │             │
-│                          ┌──────────────────┐                │             │
-│                          │                  │                │             │
-│                          │  Kubernetes API  │                │             │
-│                          │                  │                │             │
-│                          │  - Deployments   │                │             │
-│                          │  - StatefulSets  │                │             │
-│                          │  - Scale         │                │             │
-│                          │                  │                │             │
-│                          └──────────────────┘                │             │
-│                                                              │             │
-└──────────────────────────────────────────────────────────────┼─────────────┘
+│  ┌──────────────────┐    ┌──────────────────┐    ┌────────────────────────┐ │
+│  │                  │    │                  │    │                        │ │
+│  │  CRDs            │    │  Controller      │    │  Custom Metrics        │ │
+│  │                  │───▶│                  │◀───│  Adapter               │ │
+│  │  AIInference     │    │  - Reconciler    │    │                        │ │
+│  │  AutoscalerPolicy│    │  - Scaler        │    │  - GPU Metrics         │ │
+│  │                  │    │  - Metrics Fetch │    │  - Latency Metrics     │ │
+│  │                  │    │                  │    │  - Queue Depth         │ │
+│  └──────────────────┘    └────────┬─────────┘    └───────────┬────────────┘ │
+│                                   │                          │              │
+│                                   │                          │              │
+│                                   ▼                          │              │
+│                          ┌──────────────────┐                │              │
+│                          │                  │                │              │
+│                          │  Kubernetes API  │                │              │
+│                          │                  │                │              │
+│                          │  - Deployments   │                │              │
+│                          │  - StatefulSets  │                │              │
+│                          │  - Scale         │                │              │
+│                          │                  │                │              │
+│                          └──────────────────┘                │              │
+│                                                              │              │
+└──────────────────────────────────────────────────────────────┼───────────── ┘
                                                                │
                            ┌───────────────────────────────────┘
                            │
