@@ -1,0 +1,41 @@
+apiVersion: kubeai.io/v1alpha1
+kind: AIInferenceAutoscalerPolicy
+metadata:
+  name: latency-sla-policy
+  namespace: production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: realtime-inference-api
+  minReplicas: 3
+  maxReplicas: 20
+  cooldownPeriod: 180
+  metrics:
+    latency:
+      enabled: true
+      targetP99Ms: 100
+      targetP95Ms: 50
+      prometheusQuery: |
+        histogram_quantile(0.99, sum(rate(inference_request_duration_seconds_bucket{service="realtime-inference"}[5m])) by (le)) * 1000
+    gpuUtilization:
+      enabled: true
+      targetPercentage: 60
+    requestQueueDepth:
+      enabled: true
+      targetDepth: 5
+  scaleUp:
+    stabilizationWindowSeconds: 30
+    policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60

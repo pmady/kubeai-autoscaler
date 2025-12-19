@@ -1,0 +1,35 @@
+apiVersion: kubeai.io/v1alpha1
+kind: AIInferenceAutoscalerPolicy
+metadata:
+  name: gpu-intensive-policy
+  namespace: ai-workloads
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: image-generation-server
+  minReplicas: 1
+  maxReplicas: 5
+  cooldownPeriod: 600
+  metrics:
+    latency:
+      enabled: false
+    gpuUtilization:
+      enabled: true
+      targetPercentage: 70
+      prometheusQuery: |
+        avg(DCGM_FI_DEV_GPU_UTIL{pod=~"image-generation-.*"})
+    requestQueueDepth:
+      enabled: false
+  scaleUp:
+    stabilizationWindowSeconds: 120
+    policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+  scaleDown:
+    stabilizationWindowSeconds: 600
+    policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 300

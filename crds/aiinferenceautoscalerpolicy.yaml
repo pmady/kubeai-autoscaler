@@ -1,0 +1,223 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aiinferenceautoscalerpolicies.kubeai.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: kubeai.io
+  names:
+    kind: AIInferenceAutoscalerPolicy
+    listKind: AIInferenceAutoscalerPolicyList
+    plural: aiinferenceautoscalerpolicies
+    singular: aiinferenceautoscalerpolicy
+    shortNames:
+      - aiap
+      - aipolicy
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: AIInferenceAutoscalerPolicy defines autoscaling rules for AI inference workloads
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - targetRef
+                - metrics
+              properties:
+                targetRef:
+                  type: object
+                  description: Reference to the target Deployment or StatefulSet
+                  required:
+                    - apiVersion
+                    - kind
+                    - name
+                  properties:
+                    apiVersion:
+                      type: string
+                      description: API version of the target resource
+                    kind:
+                      type: string
+                      description: Kind of the target resource (Deployment or StatefulSet)
+                      enum:
+                        - Deployment
+                        - StatefulSet
+                    name:
+                      type: string
+                      description: Name of the target resource
+                minReplicas:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                  description: Minimum number of replicas
+                maxReplicas:
+                  type: integer
+                  minimum: 1
+                  description: Maximum number of replicas
+                cooldownPeriod:
+                  type: integer
+                  minimum: 0
+                  default: 300
+                  description: Cooldown period in seconds between scaling events
+                metrics:
+                  type: object
+                  description: Metrics configuration for scaling decisions
+                  properties:
+                    latency:
+                      type: object
+                      description: Latency-based scaling configuration
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: true
+                        targetP99Ms:
+                          type: integer
+                          description: Target P99 latency in milliseconds
+                        targetP95Ms:
+                          type: integer
+                          description: Target P95 latency in milliseconds
+                        prometheusQuery:
+                          type: string
+                          description: Custom Prometheus query for latency metric
+                    gpuUtilization:
+                      type: object
+                      description: GPU utilization-based scaling configuration
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: true
+                        targetPercentage:
+                          type: integer
+                          minimum: 1
+                          maximum: 100
+                          description: Target GPU utilization percentage
+                        prometheusQuery:
+                          type: string
+                          description: Custom Prometheus query for GPU utilization
+                    requestQueueDepth:
+                      type: object
+                      description: Request queue depth-based scaling configuration
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        targetDepth:
+                          type: integer
+                          minimum: 0
+                          description: Target queue depth per replica
+                        prometheusQuery:
+                          type: string
+                          description: Custom Prometheus query for queue depth
+                scaleUp:
+                  type: object
+                  description: Scale up behavior configuration
+                  properties:
+                    stabilizationWindowSeconds:
+                      type: integer
+                      minimum: 0
+                      default: 60
+                    policies:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            enum:
+                              - Pods
+                              - Percent
+                          value:
+                            type: integer
+                          periodSeconds:
+                            type: integer
+                scaleDown:
+                  type: object
+                  description: Scale down behavior configuration
+                  properties:
+                    stabilizationWindowSeconds:
+                      type: integer
+                      minimum: 0
+                      default: 300
+                    policies:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            enum:
+                              - Pods
+                              - Percent
+                          value:
+                            type: integer
+                          periodSeconds:
+                            type: integer
+            status:
+              type: object
+              properties:
+                currentReplicas:
+                  type: integer
+                  description: Current number of replicas
+                desiredReplicas:
+                  type: integer
+                  description: Desired number of replicas
+                lastScaleTime:
+                  type: string
+                  format: date-time
+                  description: Last time the policy scaled the target
+                currentMetrics:
+                  type: object
+                  properties:
+                    latencyP99Ms:
+                      type: integer
+                    latencyP95Ms:
+                      type: integer
+                    gpuUtilizationPercent:
+                      type: integer
+                    requestQueueDepth:
+                      type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Target
+          type: string
+          jsonPath: .spec.targetRef.name
+        - name: Min
+          type: integer
+          jsonPath: .spec.minReplicas
+        - name: Max
+          type: integer
+          jsonPath: .spec.maxReplicas
+        - name: Current
+          type: integer
+          jsonPath: .status.currentReplicas
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

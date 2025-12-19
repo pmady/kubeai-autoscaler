@@ -1,0 +1,36 @@
+apiVersion: kubeai.io/v1alpha1
+kind: AIInferenceAutoscalerPolicy
+metadata:
+  name: llm-inference-policy
+  namespace: ai-workloads
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-inference-server
+  minReplicas: 2
+  maxReplicas: 10
+  cooldownPeriod: 300
+  metrics:
+    latency:
+      enabled: true
+      targetP99Ms: 500
+      targetP95Ms: 200
+    gpuUtilization:
+      enabled: true
+      targetPercentage: 80
+    requestQueueDepth:
+      enabled: true
+      targetDepth: 10
+  scaleUp:
+    stabilizationWindowSeconds: 60
+    policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 120
