@@ -43,9 +43,9 @@ Traditional Kubernetes autoscalers (HPA, KEDA) are CPU/memory-focused and not op
 │                                                                 │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
 │  │   CRDs      │    │ Controller  │    │  Metrics Adapter    │  │
-│  │             │───▶│             │◀───│                     │ │
-│  │ AIPolicy    │    │ Reconciler  │    │ GPU/Latency/Queue   │ │
-│  └─────────────┘    └──────┬──────┘    └──────────┬──────────┘ │
+│  │             │───▶│             │◀───│                     │  │
+│  │ AIPolicy    │    │ Reconciler  │    │ GPU/Latency/Queue   │  │
+│  └─────────────┘    └──────┬──────┘    └──────────┬──────────┘  │
 │                            │                      │             │
 │                            ▼                      │             │
 │                   ┌─────────────┐                 │             │
