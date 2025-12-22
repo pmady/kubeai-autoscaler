@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeai-system
+  labels:
+    app.kubernetes.io/name: kubeai-autoscaler
+    app.kubernetes.io/component: controller

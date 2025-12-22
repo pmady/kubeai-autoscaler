@@ -26,6 +26,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
+	"github.com/pmady/kubeai-autoscaler/pkg/controller"
+	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
 )
 
 var (
@@ -35,20 +40,21 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	// Add custom scheme here
-	// utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var prometheusAddr string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&prometheusAddr, "prometheus-address", "http://prometheus:9090", "The address of the Prometheus server.")
 
 	opts := zap.Options{
 		Development: true,
@@ -59,7 +65,10 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "kubeai-autoscaler.kubeai.io",
@@ -69,14 +78,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create Prometheus metrics client
+	var metricsClient metrics.Client
+	if prometheusAddr != "" {
+		metricsClient, err = metrics.NewPrometheusClient(prometheusAddr)
+		if err != nil {
+			setupLog.Error(err, "unable to create Prometheus client, continuing without metrics")
+		}
+	}
+
 	// Setup reconciler
-	// if err = (&controllers.AIInferenceAutoscalerPolicyReconciler{
-	// 	Client: mgr.GetClient(),
-	// 	Scheme: mgr.GetScheme(),
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
-	// 	os.Exit(1)
-	// }
+	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient)
+	if err = reconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
