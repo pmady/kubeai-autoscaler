@@ -1,0 +1,19 @@
+apiVersion: v2
+name: kubeai-autoscaler
+description: A Helm chart for KubeAI Autoscaler - Kubernetes-native AI inference workload scaling
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - autoscaling
+  - ai
+  - inference
+  - gpu
+  - machine-learning
+home: https://github.com/pmady/kubeai-autoscaler
+sources:
+  - https://github.com/pmady/kubeai-autoscaler
+maintainers:
+  - name: pmady
+    email: pavan4devops@gmail.com

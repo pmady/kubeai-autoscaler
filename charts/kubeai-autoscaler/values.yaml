@@ -1,0 +1,72 @@
+# Default values for kubeai-autoscaler
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/pmady/kubeai-autoscaler
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Controller configuration
+controller:
+  leaderElection: true
+  metricsBindAddress: ":8080"
+  healthProbeBindAddress: ":8081"
+
+# Prometheus configuration
+prometheus:
+  address: "http://prometheus.monitoring.svc.cluster.local:9090"
+
+# Webhook configuration
+webhook:
+  enabled: false
+  port: 9443
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
