@@ -20,6 +20,9 @@ import (
 	"flag"
 	"os"
 
+	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
+	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,17 +38,18 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	// Add custom scheme here
-	// utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var prometheusAddr string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&prometheusAddr, "prometheus-address", "http://prometheus:9090", "The address of the Prometheus server.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -69,14 +73,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create Prometheus metrics client
+	var metricsClient metrics.Client
+	if prometheusAddr != "" {
+		var clientErr error
+		metricsClient, clientErr = metrics.NewPrometheusClient(prometheusAddr)
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to create Prometheus client, continuing without metrics")
+		} else {
+			setupLog.Info("Prometheus client configured", "address", prometheusAddr)
+		}
+	}
+
 	// Setup reconciler
-	// if err = (&controllers.AIInferenceAutoscalerPolicyReconciler{
-	// 	Client: mgr.GetClient(),
-	// 	Scheme: mgr.GetScheme(),
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
-	// 	os.Exit(1)
-	// }
+	reconciler := NewAIInferenceAutoscalerPolicyReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		metricsClient,
+	)
+	if err = reconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

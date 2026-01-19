@@ -129,11 +129,11 @@ kubectl get aiap -n ai-workloads
 
 ## Roadmap
 
-### Phase 1 (MVP) - In Progress
+### Phase 1 (MVP) - Complete
 
 - [x] CRD for autoscaling policy
-- [ ] Basic controller logic
-- [ ] Prometheus integration
+- [x] Basic controller logic
+- [x] Prometheus integration
 
 ### Phase 2
 
