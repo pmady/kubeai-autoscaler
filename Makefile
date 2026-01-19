@@ -91,3 +91,52 @@ manifests: ## Generate CRD manifests.
 clean: ## Clean build artifacts.
 	rm -rf bin/
 	rm -f cover.out
+
+##@ Testing
+
+.PHONY: test-coverage
+test-coverage: ## Run tests with coverage report.
+	go test ./... -coverprofile cover.out -covermode=atomic
+	go tool cover -html=cover.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+.PHONY: test-verbose
+test-verbose: ## Run tests with verbose output.
+	go test ./... -v
+
+.PHONY: test-race
+test-race: ## Run tests with race detector.
+	go test ./... -race
+
+##@ Local Development
+
+.PHONY: run-local
+run-local: ## Run controller locally with default settings.
+	go run ./controller/main.go --prometheus-address=http://localhost:9090
+
+.PHONY: kind-create
+kind-create: ## Create a kind cluster for local development.
+	kind create cluster --name kubeai-dev
+
+.PHONY: kind-delete
+kind-delete: ## Delete the kind cluster.
+	kind delete cluster --name kubeai-dev
+
+.PHONY: kind-load
+kind-load: docker-build ## Load docker image into kind cluster.
+	kind load docker-image ${IMG} --name kubeai-dev
+
+##@ Release
+
+.PHONY: release-build
+release-build: ## Build release binaries for multiple platforms.
+	GOOS=linux GOARCH=amd64 go build -o bin/manager-linux-amd64 ./controller/main.go
+	GOOS=linux GOARCH=arm64 go build -o bin/manager-linux-arm64 ./controller/main.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/manager-darwin-amd64 ./controller/main.go
+	GOOS=darwin GOARCH=arm64 go build -o bin/manager-darwin-arm64 ./controller/main.go
+
+.PHONY: version
+version: ## Display version information.
+	@echo "Version: $(shell git describe --tags --always --dirty 2>/dev/null || echo 'dev')"
+	@echo "Commit: $(shell git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+	@echo "Go Version: $(shell go version)"

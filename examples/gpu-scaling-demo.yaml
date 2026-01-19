@@ -1,0 +1,108 @@
+# GPU-based Autoscaling Demo
+# This example demonstrates scaling an AI inference workload based on GPU utilization
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-inference-server
+  namespace: ai-demo
+  labels:
+    app: gpu-inference
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gpu-inference
+  template:
+    metadata:
+      labels:
+        app: gpu-inference
+    spec:
+      containers:
+        - name: inference
+          image: nvcr.io/nvidia/tritonserver:23.10-py3
+          ports:
+            - containerPort: 8000
+              name: http
+            - containerPort: 8001
+              name: grpc
+            - containerPort: 8002
+              name: metrics
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+              memory: "8Gi"
+              cpu: "4"
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-inference-server
+  namespace: ai-demo
+spec:
+  selector:
+    app: gpu-inference
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: grpc
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 8002
+      targetPort: 8002
+---
+apiVersion: kubeai.io/v1alpha1
+kind: AIInferenceAutoscalerPolicy
+metadata:
+  name: gpu-inference-policy
+  namespace: ai-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gpu-inference-server
+  minReplicas: 2
+  maxReplicas: 8
+  cooldownPeriod: 300
+  metrics:
+    gpuUtilization:
+      enabled: true
+      targetPercentage: 75
+      prometheusQuery: |
+        avg(DCGM_FI_DEV_GPU_UTIL{pod=~"gpu-inference-server.*"})
+    latency:
+      enabled: true
+      targetP99Ms: 200
+      prometheusQuery: |
+        histogram_quantile(0.99, 
+          sum(rate(nv_inference_request_duration_us_bucket{model="llm"}[5m])) by (le)
+        ) / 1000
+    requestQueueDepth:
+      enabled: true
+      targetDepth: 5
+      prometheusQuery: |
+        sum(nv_inference_pending_request_count{pod=~"gpu-inference-server.*"})
+  scaleUp:
+    stabilizationWindowSeconds: 60
+    policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 120

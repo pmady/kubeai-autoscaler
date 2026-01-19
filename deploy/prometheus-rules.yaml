@@ -1,0 +1,111 @@
+# Prometheus Recording Rules for KubeAI Autoscaler
+# These rules pre-compute metrics for efficient querying
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubeai-autoscaler-rules
+  namespace: monitoring
+  labels:
+    app: kubeai-autoscaler
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: kubeai-autoscaler.rules
+      interval: 30s
+      rules:
+        # GPU Utilization Recording Rules
+        - record: kubeai:gpu_utilization:avg
+          expr: avg(DCGM_FI_DEV_GPU_UTIL) by (namespace, pod)
+          labels:
+            source: kubeai-autoscaler
+
+        - record: kubeai:gpu_memory_used:avg
+          expr: avg(DCGM_FI_DEV_FB_USED) by (namespace, pod)
+          labels:
+            source: kubeai-autoscaler
+
+        - record: kubeai:gpu_memory_total:avg
+          expr: avg(DCGM_FI_DEV_FB_FREE + DCGM_FI_DEV_FB_USED) by (namespace, pod)
+          labels:
+            source: kubeai-autoscaler
+
+        # Inference Latency Recording Rules
+        - record: kubeai:inference_latency_p99:5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(inference_request_duration_seconds_bucket[5m])) by (le, namespace, service)
+            )
+          labels:
+            source: kubeai-autoscaler
+
+        - record: kubeai:inference_latency_p95:5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(inference_request_duration_seconds_bucket[5m])) by (le, namespace, service)
+            )
+          labels:
+            source: kubeai-autoscaler
+
+        - record: kubeai:inference_latency_p50:5m
+          expr: |
+            histogram_quantile(0.50,
+              sum(rate(inference_request_duration_seconds_bucket[5m])) by (le, namespace, service)
+            )
+          labels:
+            source: kubeai-autoscaler
+
+        # Request Queue Recording Rules
+        - record: kubeai:request_queue_depth:sum
+          expr: sum(inference_request_queue_depth) by (namespace, service)
+          labels:
+            source: kubeai-autoscaler
+
+        - record: kubeai:requests_per_second:5m
+          expr: sum(rate(inference_request_total[5m])) by (namespace, service)
+          labels:
+            source: kubeai-autoscaler
+
+    - name: kubeai-autoscaler.alerts
+      rules:
+        # High GPU Utilization Alert
+        - alert: KubeAIHighGPUUtilization
+          expr: kubeai:gpu_utilization:avg > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High GPU utilization detected"
+            description: "GPU utilization is above 90% for pod {{ $labels.pod }} in namespace {{ $labels.namespace }}"
+
+        # High Latency Alert
+        - alert: KubeAIHighLatency
+          expr: kubeai:inference_latency_p99:5m > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High inference latency detected"
+            description: "P99 latency is above 1 second for service {{ $labels.service }} in namespace {{ $labels.namespace }}"
+
+        # Queue Depth Alert
+        - alert: KubeAIHighQueueDepth
+          expr: kubeai:request_queue_depth:sum > 100
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High request queue depth"
+            description: "Queue depth is above 100 for service {{ $labels.service }} in namespace {{ $labels.namespace }}"
+
+        # Scaling Event Alert
+        - alert: KubeAIFrequentScaling
+          expr: |
+            changes(kube_deployment_spec_replicas{deployment=~".*inference.*"}[30m]) > 5
+          for: 5m
+          labels:
+            severity: info
+          annotations:
+            summary: "Frequent scaling events detected"
+            description: "Deployment {{ $labels.deployment }} has scaled more than 5 times in 30 minutes"
