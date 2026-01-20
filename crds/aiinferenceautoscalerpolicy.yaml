@@ -119,6 +119,25 @@ spec:
                         prometheusQuery:
                           type: string
                           description: Custom Prometheus query for queue depth
+                algorithm:
+                  type: object
+                  description: Scaling algorithm configuration
+                  properties:
+                    name:
+                      type: string
+                      default: MaxRatio
+                      description: Algorithm name (built-in or custom plugin)
+                    tolerance:
+                      type: number
+                      minimum: 0
+                      maximum: 1
+                      default: 0.1
+                      description: Scaling tolerance (e.g., 0.1 = 10%)
+                    weights:
+                      type: array
+                      description: Weights for WeightedRatio algorithm
+                      items:
+                        type: number
                 scaleUp:
                   type: object
                   description: Scale up behavior configuration
@@ -187,6 +206,12 @@ spec:
                       type: integer
                     requestQueueDepth:
                       type: integer
+                lastAlgorithm:
+                  type: string
+                  description: Algorithm used for the last scaling decision
+                lastScaleReason:
+                  type: string
+                  description: Reason for the last scaling decision
                 conditions:
                   type: array
                   items:
@@ -218,6 +243,9 @@ spec:
         - name: Current
           type: integer
           jsonPath: .status.currentReplicas
+        - name: Algorithm
+          type: string
+          jsonPath: .status.lastAlgorithm
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp

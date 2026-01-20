@@ -17,9 +17,11 @@ limitations under the License.
 package scaling
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaxRatioAlgorithm(t *testing.T) {
@@ -166,4 +168,149 @@ func TestWeightedRatioAlgorithm(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// Tests for the new ScalingAlgorithm interface
+
+func TestMaxRatioAlgorithm_Name(t *testing.T) {
+	algo := NewMaxRatioAlgorithm(0.1)
+	assert.Equal(t, "MaxRatio", algo.Name())
+}
+
+func TestAverageRatioAlgorithm_Name(t *testing.T) {
+	algo := NewAverageRatioAlgorithm(0.1)
+	assert.Equal(t, "AverageRatio", algo.Name())
+}
+
+func TestWeightedRatioAlgorithm_Name(t *testing.T) {
+	algo := NewWeightedRatioAlgorithm(0.1, nil)
+	assert.Equal(t, "WeightedRatio", algo.Name())
+}
+
+func TestMaxRatioAlgorithm_ComputeScale(t *testing.T) {
+	algo := NewMaxRatioAlgorithm(0.1)
+	ctx := context.Background()
+
+	tests := []struct {
+		name           string
+		input          ScalingInput
+		expectedResult int32
+		expectedReason string
+	}{
+		{
+			name: "scale up based on max ratio",
+			input: ScalingInput{
+				CurrentReplicas: 2,
+				MinReplicas:     1,
+				MaxReplicas:     10,
+				MetricRatios:    []float64{1.5, 2.0, 1.2},
+				Tolerance:       0.1,
+			},
+			expectedResult: 4,
+			expectedReason: "scaled based on max ratio",
+		},
+		{
+			name: "no metrics returns current",
+			input: ScalingInput{
+				CurrentReplicas: 3,
+				MinReplicas:     1,
+				MaxReplicas:     10,
+				MetricRatios:    []float64{},
+				Tolerance:       0.1,
+			},
+			expectedResult: 3,
+			expectedReason: "no metrics available",
+		},
+		{
+			name: "within tolerance",
+			input: ScalingInput{
+				CurrentReplicas: 3,
+				MinReplicas:     1,
+				MaxReplicas:     10,
+				MetricRatios:    []float64{1.05, 0.95},
+				Tolerance:       0.1,
+			},
+			expectedResult: 3,
+			expectedReason: "within tolerance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := algo.ComputeScale(ctx, tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedResult, result.DesiredReplicas)
+			assert.Equal(t, tt.expectedReason, result.Reason)
+		})
+	}
+}
+
+func TestAverageRatioAlgorithm_ComputeScale(t *testing.T) {
+	algo := NewAverageRatioAlgorithm(0.1)
+	ctx := context.Background()
+
+	input := ScalingInput{
+		CurrentReplicas: 2,
+		MinReplicas:     1,
+		MaxReplicas:     10,
+		MetricRatios:    []float64{2.0, 1.0, 1.5}, // avg = 1.5
+		Tolerance:       0.1,
+	}
+
+	result, err := algo.ComputeScale(ctx, input)
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), result.DesiredReplicas)
+	assert.Equal(t, "scaled based on average ratio", result.Reason)
+}
+
+func TestWeightedRatioAlgorithm_ComputeScale(t *testing.T) {
+	algo := NewWeightedRatioAlgorithm(0.1, []float64{2.0, 1.0})
+	ctx := context.Background()
+
+	input := ScalingInput{
+		CurrentReplicas: 2,
+		MinReplicas:     1,
+		MaxReplicas:     10,
+		MetricRatios:    []float64{2.0, 1.0}, // weighted avg = (2*2 + 1*1) / 3 = 1.67
+		Tolerance:       0.1,
+	}
+
+	result, err := algo.ComputeScale(ctx, input)
+	require.NoError(t, err)
+	assert.Equal(t, int32(4), result.DesiredReplicas)
+	assert.Equal(t, "scaled based on weighted ratio", result.Reason)
+}
+
+func TestWeightedRatioAlgorithm_SetWeights(t *testing.T) {
+	algo := NewWeightedRatioAlgorithm(0.1, nil)
+	assert.Empty(t, algo.Weights)
+
+	algo.SetWeights([]float64{1.0, 2.0, 3.0})
+	assert.Equal(t, []float64{1.0, 2.0, 3.0}, algo.Weights)
+}
+
+func TestScalingAlgorithm_ToleranceFromInput(t *testing.T) {
+	// Test that input tolerance overrides algorithm tolerance
+	algo := NewMaxRatioAlgorithm(0.5) // High tolerance
+	ctx := context.Background()
+
+	input := ScalingInput{
+		CurrentReplicas: 2,
+		MinReplicas:     1,
+		MaxReplicas:     10,
+		MetricRatios:    []float64{1.2}, // 20% above target
+		Tolerance:       0.1,            // Stricter tolerance from input
+	}
+
+	result, err := algo.ComputeScale(ctx, input)
+	require.NoError(t, err)
+	// With 0.1 tolerance, 1.2 ratio should trigger scaling
+	assert.Equal(t, int32(3), result.DesiredReplicas)
+}
+
+func TestScalingAlgorithm_ImplementsInterface(t *testing.T) {
+	// Verify all algorithms implement ScalingAlgorithm
+	var _ ScalingAlgorithm = (*MaxRatioAlgorithm)(nil)
+	var _ ScalingAlgorithm = (*AverageRatioAlgorithm)(nil)
+	var _ ScalingAlgorithm = (*WeightedRatioAlgorithm)(nil)
 }

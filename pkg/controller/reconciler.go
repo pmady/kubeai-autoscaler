@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,6 +32,7 @@ import (
 
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
+	"github.com/pmady/kubeai-autoscaler/pkg/scaling"
 )
 
 const (
@@ -46,23 +46,34 @@ const (
 	DefaultRequeueInterval = 30 * time.Second
 )
 
+// DefaultAlgorithmName is the default scaling algorithm
+const DefaultAlgorithmName = "MaxRatio"
+
+// DefaultTolerance is the default tolerance for scaling algorithms
+const DefaultTolerance = 0.1
+
 // AIInferenceAutoscalerPolicyReconciler reconciles AIInferenceAutoscalerPolicy objects
 type AIInferenceAutoscalerPolicyReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	MetricsClient  metrics.Client
-	LastScaleTime  map[string]time.Time
-	CooldownPeriod time.Duration
+	Scheme           *runtime.Scheme
+	MetricsClient    metrics.Client
+	AlgorithmRegistry *scaling.Registry
+	LastScaleTime    map[string]time.Time
+	CooldownPeriod   time.Duration
 }
 
 // NewReconciler creates a new reconciler
-func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient metrics.Client) *AIInferenceAutoscalerPolicyReconciler {
+func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient metrics.Client, registry *scaling.Registry) *AIInferenceAutoscalerPolicyReconciler {
+	if registry == nil {
+		registry = scaling.DefaultRegistry
+	}
 	return &AIInferenceAutoscalerPolicyReconciler{
-		Client:         client,
-		Scheme:         scheme,
-		MetricsClient:  metricsClient,
-		LastScaleTime:  make(map[string]time.Time),
-		CooldownPeriod: DefaultCooldownPeriod,
+		Client:            client,
+		Scheme:            scheme,
+		MetricsClient:     metricsClient,
+		AlgorithmRegistry: registry,
+		LastScaleTime:     make(map[string]time.Time),
+		CooldownPeriod:    DefaultCooldownPeriod,
 	}
 }
 
@@ -108,7 +119,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) Reconcile(ctx context.Context, r
 	}
 
 	// Calculate desired replicas
-	desiredReplicas := r.calculateDesiredReplicas(ctx, policy, currentReplicas, currentMetrics)
+	desiredReplicas, algorithmUsed, scaleReason := r.calculateDesiredReplicas(ctx, policy, currentReplicas, currentMetrics)
 
 	// Check cooldown period
 	policyKey := fmt.Sprintf("%s/%s", policy.Namespace, policy.Name)
@@ -129,7 +140,9 @@ func (r *AIInferenceAutoscalerPolicyReconciler) Reconcile(ctx context.Context, r
 	if desiredReplicas != currentReplicas {
 		logger.Info("Scaling target",
 			"current", currentReplicas,
-			"desired", desiredReplicas)
+			"desired", desiredReplicas,
+			"algorithm", algorithmUsed,
+			"reason", scaleReason)
 
 		if err := r.scaleTarget(ctx, policy, desiredReplicas); err != nil {
 			logger.Error(err, "Failed to scale target")
@@ -139,11 +152,11 @@ func (r *AIInferenceAutoscalerPolicyReconciler) Reconcile(ctx context.Context, r
 
 		r.LastScaleTime[policyKey] = time.Now()
 		r.updateCondition(ctx, policy, ConditionTypeScaling, metav1.ConditionTrue, "Scaled",
-			fmt.Sprintf("Scaled from %d to %d replicas", currentReplicas, desiredReplicas))
+			fmt.Sprintf("Scaled from %d to %d replicas using %s algorithm", currentReplicas, desiredReplicas, algorithmUsed))
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, policy, currentReplicas, desiredReplicas, currentMetrics); err != nil {
+	if err := r.updateStatus(ctx, policy, currentReplicas, desiredReplicas, currentMetrics, algorithmUsed, scaleReason); err != nil {
 		logger.Error(err, "Failed to update status")
 	}
 
@@ -235,49 +248,39 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy,
 	currentReplicas int32,
 	currentMetrics *kubeaiv1alpha1.CurrentMetrics,
-) int32 {
+) (int32, string, string) {
 	logger := log.FromContext(ctx)
 
-	maxRatio := 1.0
+	// Determine which algorithm to use
+	algorithmName := DefaultAlgorithmName
+	tolerance := DefaultTolerance
+	var weights []float64
 
-	// Calculate latency ratio
-	if policy.Spec.Metrics.Latency != nil && policy.Spec.Metrics.Latency.Enabled {
-		if policy.Spec.Metrics.Latency.TargetP99Ms > 0 && currentMetrics.LatencyP99Ms > 0 {
-			ratio := float64(currentMetrics.LatencyP99Ms) / float64(policy.Spec.Metrics.Latency.TargetP99Ms)
-			if ratio > maxRatio {
-				maxRatio = ratio
-			}
+	if policy.Spec.Algorithm != nil {
+		if policy.Spec.Algorithm.Name != "" {
+			algorithmName = policy.Spec.Algorithm.Name
 		}
-		if policy.Spec.Metrics.Latency.TargetP95Ms > 0 && currentMetrics.LatencyP95Ms > 0 {
-			ratio := float64(currentMetrics.LatencyP95Ms) / float64(policy.Spec.Metrics.Latency.TargetP95Ms)
-			if ratio > maxRatio {
-				maxRatio = ratio
-			}
+		if policy.Spec.Algorithm.Tolerance > 0 {
+			tolerance = policy.Spec.Algorithm.Tolerance
 		}
+		weights = policy.Spec.Algorithm.Weights
 	}
 
-	// Calculate GPU utilization ratio
-	if policy.Spec.Metrics.GPUUtilization != nil && policy.Spec.Metrics.GPUUtilization.Enabled {
-		if policy.Spec.Metrics.GPUUtilization.TargetPercentage > 0 && currentMetrics.GPUUtilizationPercent > 0 {
-			ratio := float64(currentMetrics.GPUUtilizationPercent) / float64(policy.Spec.Metrics.GPUUtilization.TargetPercentage)
-			if ratio > maxRatio {
-				maxRatio = ratio
-			}
-		}
+	// Get the algorithm from registry
+	algorithm, err := r.AlgorithmRegistry.Get(algorithmName)
+	if err != nil {
+		logger.Error(err, "Algorithm not found, falling back to MaxRatio", "algorithm", algorithmName)
+		algorithm, _ = r.AlgorithmRegistry.Get(DefaultAlgorithmName)
+		algorithmName = DefaultAlgorithmName
 	}
 
-	// Calculate queue depth ratio
-	if policy.Spec.Metrics.RequestQueueDepth != nil && policy.Spec.Metrics.RequestQueueDepth.Enabled {
-		if policy.Spec.Metrics.RequestQueueDepth.TargetDepth > 0 && currentMetrics.RequestQueueDepth > 0 {
-			ratio := float64(currentMetrics.RequestQueueDepth) / float64(policy.Spec.Metrics.RequestQueueDepth.TargetDepth*currentReplicas)
-			if ratio > maxRatio {
-				maxRatio = ratio
-			}
-		}
+	// If using WeightedRatio, set the weights
+	if weightedAlgo, ok := algorithm.(*scaling.WeightedRatioAlgorithm); ok && len(weights) > 0 {
+		weightedAlgo.SetWeights(weights)
 	}
 
-	// Calculate desired replicas
-	desiredReplicas := int32(math.Ceil(float64(currentReplicas) * maxRatio))
+	// Build metric ratios
+	metricRatios := r.buildMetricRatios(policy, currentReplicas, currentMetrics)
 
 	// Apply min/max constraints
 	minReplicas := policy.Spec.MinReplicas
@@ -286,21 +289,71 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	}
 	maxReplicas := policy.Spec.MaxReplicas
 
-	if desiredReplicas < minReplicas {
-		desiredReplicas = minReplicas
+	// Build scaling input
+	input := scaling.ScalingInput{
+		CurrentReplicas: currentReplicas,
+		MinReplicas:     minReplicas,
+		MaxReplicas:     maxReplicas,
+		MetricRatios:    metricRatios,
+		Tolerance:       tolerance,
 	}
-	if desiredReplicas > maxReplicas {
-		desiredReplicas = maxReplicas
+
+	// Compute scale using the algorithm
+	result, err := algorithm.ComputeScale(ctx, input)
+	if err != nil {
+		logger.Error(err, "Algorithm computation failed, keeping current replicas", "algorithm", algorithmName)
+		return currentReplicas, algorithmName, "computation failed"
 	}
 
 	logger.Info("Calculated desired replicas",
+		"algorithm", algorithmName,
 		"current", currentReplicas,
-		"desired", desiredReplicas,
-		"maxRatio", maxRatio,
+		"desired", result.DesiredReplicas,
+		"reason", result.Reason,
+		"tolerance", tolerance,
 		"min", minReplicas,
 		"max", maxReplicas)
 
-	return desiredReplicas
+	return result.DesiredReplicas, algorithmName, result.Reason
+}
+
+// buildMetricRatios builds the list of metric ratios from current metrics
+func (r *AIInferenceAutoscalerPolicyReconciler) buildMetricRatios(
+	policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy,
+	currentReplicas int32,
+	currentMetrics *kubeaiv1alpha1.CurrentMetrics,
+) []float64 {
+	var ratios []float64
+
+	// Calculate latency ratios
+	if policy.Spec.Metrics.Latency != nil && policy.Spec.Metrics.Latency.Enabled {
+		if policy.Spec.Metrics.Latency.TargetP99Ms > 0 && currentMetrics.LatencyP99Ms > 0 {
+			ratio := float64(currentMetrics.LatencyP99Ms) / float64(policy.Spec.Metrics.Latency.TargetP99Ms)
+			ratios = append(ratios, ratio)
+		}
+		if policy.Spec.Metrics.Latency.TargetP95Ms > 0 && currentMetrics.LatencyP95Ms > 0 {
+			ratio := float64(currentMetrics.LatencyP95Ms) / float64(policy.Spec.Metrics.Latency.TargetP95Ms)
+			ratios = append(ratios, ratio)
+		}
+	}
+
+	// Calculate GPU utilization ratio
+	if policy.Spec.Metrics.GPUUtilization != nil && policy.Spec.Metrics.GPUUtilization.Enabled {
+		if policy.Spec.Metrics.GPUUtilization.TargetPercentage > 0 && currentMetrics.GPUUtilizationPercent > 0 {
+			ratio := float64(currentMetrics.GPUUtilizationPercent) / float64(policy.Spec.Metrics.GPUUtilization.TargetPercentage)
+			ratios = append(ratios, ratio)
+		}
+	}
+
+	// Calculate queue depth ratio
+	if policy.Spec.Metrics.RequestQueueDepth != nil && policy.Spec.Metrics.RequestQueueDepth.Enabled {
+		if policy.Spec.Metrics.RequestQueueDepth.TargetDepth > 0 && currentMetrics.RequestQueueDepth > 0 {
+			ratio := float64(currentMetrics.RequestQueueDepth) / float64(policy.Spec.Metrics.RequestQueueDepth.TargetDepth*currentReplicas)
+			ratios = append(ratios, ratio)
+		}
+	}
+
+	return ratios
 }
 
 // scaleTarget scales the target deployment or statefulset
@@ -339,10 +392,13 @@ func (r *AIInferenceAutoscalerPolicyReconciler) updateStatus(
 	policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy,
 	currentReplicas, desiredReplicas int32,
 	currentMetrics *kubeaiv1alpha1.CurrentMetrics,
+	algorithmUsed, scaleReason string,
 ) error {
 	policy.Status.CurrentReplicas = currentReplicas
 	policy.Status.DesiredReplicas = desiredReplicas
 	policy.Status.CurrentMetrics = currentMetrics
+	policy.Status.LastAlgorithm = algorithmUsed
+	policy.Status.LastScaleReason = scaleReason
 
 	if currentReplicas != desiredReplicas {
 		now := metav1.Now()

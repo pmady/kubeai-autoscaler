@@ -25,15 +25,17 @@ import (
 
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
+	"github.com/pmady/kubeai-autoscaler/pkg/scaling"
 )
 
 func TestCalculateDesiredReplicas(t *testing.T) {
 	tests := []struct {
-		name            string
-		policy          *kubeaiv1alpha1.AIInferenceAutoscalerPolicy
-		currentReplicas int32
-		currentMetrics  *kubeaiv1alpha1.CurrentMetrics
-		expected        int32
+		name              string
+		policy            *kubeaiv1alpha1.AIInferenceAutoscalerPolicy
+		currentReplicas   int32
+		currentMetrics    *kubeaiv1alpha1.CurrentMetrics
+		expected          int32
+		expectedAlgorithm string
 	}{
 		{
 			name: "scale up based on latency",
@@ -49,11 +51,10 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 2,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				LatencyP99Ms: 200, // 2x target
-			},
-			expected: 4, // 2 * 2 = 4
+			currentReplicas:   2,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
+			expected:          4,
+			expectedAlgorithm: "MaxRatio",
 		},
 		{
 			name: "scale up based on GPU utilization",
@@ -69,11 +70,10 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 2,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				GPUUtilizationPercent: 100, // 2x target
-			},
-			expected: 4,
+			currentReplicas:   2,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{GPUUtilizationPercent: 100},
+			expected:          4,
+			expectedAlgorithm: "MaxRatio",
 		},
 		{
 			name: "respect max replicas",
@@ -89,11 +89,10 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 3,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				LatencyP99Ms: 500, // 5x target, would be 15 replicas
-			},
-			expected: 5, // capped at max
+			currentReplicas:   3,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 500},
+			expected:          5,
+			expectedAlgorithm: "MaxRatio",
 		},
 		{
 			name: "respect min replicas",
@@ -109,11 +108,10 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 1,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				LatencyP99Ms: 100, // at target
-			},
-			expected: 2, // should be bumped to min replicas
+			currentReplicas:   1,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
+			expected:          2,
+			expectedAlgorithm: "MaxRatio",
 		},
 		{
 			name: "no scaling when at target",
@@ -129,11 +127,10 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 3,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				LatencyP99Ms: 100, // exactly at target
-			},
-			expected: 3,
+			currentReplicas:   3,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
+			expected:          3,
+			expectedAlgorithm: "MaxRatio",
 		},
 		{
 			name: "use highest ratio from multiple metrics",
@@ -153,22 +150,72 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas: 2,
-			currentMetrics: &kubeaiv1alpha1.CurrentMetrics{
-				LatencyP99Ms:          150, // 1.5x
-				GPUUtilizationPercent: 150, // 3x - this is higher
+			currentReplicas:   2,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 150, GPUUtilizationPercent: 150},
+			expected:          6,
+			expectedAlgorithm: "MaxRatio",
+		},
+		{
+			name: "use AverageRatio algorithm",
+			policy: &kubeaiv1alpha1.AIInferenceAutoscalerPolicy{
+				Spec: kubeaiv1alpha1.AIInferenceAutoscalerPolicySpec{
+					MinReplicas: 1,
+					MaxReplicas: 10,
+					Algorithm: &kubeaiv1alpha1.AlgorithmSpec{
+						Name:      "AverageRatio",
+						Tolerance: 0.1,
+					},
+					Metrics: kubeaiv1alpha1.MetricsSpec{
+						Latency: &kubeaiv1alpha1.LatencyMetric{
+							Enabled:     true,
+							TargetP99Ms: 100,
+						},
+						GPUUtilization: &kubeaiv1alpha1.GPUUtilizationMetric{
+							Enabled:          true,
+							TargetPercentage: 50,
+						},
+					},
+				},
 			},
-			expected: 6, // 2 * 3 = 6
+			currentReplicas:   2,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200, GPUUtilizationPercent: 100},
+			expected:          4, // avg of 2.0 and 2.0 = 2.0, 2 * 2.0 = 4
+			expectedAlgorithm: "AverageRatio",
+		},
+		{
+			name: "fallback to MaxRatio for unknown algorithm",
+			policy: &kubeaiv1alpha1.AIInferenceAutoscalerPolicy{
+				Spec: kubeaiv1alpha1.AIInferenceAutoscalerPolicySpec{
+					MinReplicas: 1,
+					MaxReplicas: 10,
+					Algorithm: &kubeaiv1alpha1.AlgorithmSpec{
+						Name: "NonExistentAlgorithm",
+					},
+					Metrics: kubeaiv1alpha1.MetricsSpec{
+						Latency: &kubeaiv1alpha1.LatencyMetric{
+							Enabled:     true,
+							TargetP99Ms: 100,
+						},
+					},
+				},
+			},
+			currentReplicas:   2,
+			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
+			expected:          4,
+			expectedAlgorithm: "MaxRatio", // Falls back
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &AIInferenceAutoscalerPolicyReconciler{}
+			r := &AIInferenceAutoscalerPolicyReconciler{
+				AlgorithmRegistry: scaling.DefaultRegistry,
+			}
 			ctx := context.Background()
 
-			result := r.calculateDesiredReplicas(ctx, tt.policy, tt.currentReplicas, tt.currentMetrics)
+			result, algorithmUsed, _ := r.calculateDesiredReplicas(ctx, tt.policy, tt.currentReplicas, tt.currentMetrics)
 			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expectedAlgorithm, algorithmUsed)
 		})
 	}
 }

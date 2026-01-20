@@ -32,6 +32,7 @@ import (
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 	"github.com/pmady/kubeai-autoscaler/pkg/controller"
 	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
+	"github.com/pmady/kubeai-autoscaler/pkg/scaling"
 )
 
 var (
@@ -49,6 +50,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var prometheusAddr string
+	var pluginDir string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -56,6 +58,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&prometheusAddr, "prometheus-address", "http://prometheus:9090", "The address of the Prometheus server.")
+	flag.StringVar(&pluginDir, "plugin-dir", "", "Directory containing custom algorithm plugins (.so files)")
 
 	opts := zap.Options{
 		Development: true,
@@ -79,6 +82,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load custom algorithm plugins
+	if pluginDir != "" {
+		setupLog.Info("loading custom algorithm plugins", "directory", pluginDir)
+		if err := scaling.LoadAndRegisterPlugins(pluginDir, scaling.DefaultRegistry); err != nil {
+			setupLog.Error(err, "failed to load some plugins, continuing with available algorithms")
+		}
+		setupLog.Info("registered algorithms", "algorithms", scaling.List())
+	}
+
 	// Create Prometheus metrics client
 	var metricsClient metrics.Client
 	if prometheusAddr != "" {
@@ -89,7 +101,7 @@ func main() {
 	}
 
 	// Setup reconciler
-	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient)
+	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient, scaling.DefaultRegistry)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
 		os.Exit(1)
