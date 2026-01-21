@@ -190,7 +190,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) fetchMetrics(
 		if err != nil {
 			logger.Error(err, "Failed to fetch queue depth")
 		} else {
-			currentMetrics.RequestQueueDepth = int32(queueDepth) //nolint:gosec // queue depth won't exceed int32 max in practice
+			currentMetrics.RequestQueueDepth = int32(queueDepth) // #nosec G115 - queue depth won't exceed int32 max in practice
 		}
 	}
 
