@@ -126,26 +126,26 @@ type MockClient struct {
 }
 
 // Query returns the mock query value
-func (m *MockClient) Query(ctx context.Context, query string) (float64, error) {
+func (m *MockClient) Query(_ context.Context, _ string) (float64, error) {
 	return m.QueryValue, m.Error
 }
 
 // GetLatencyP99 returns the mock P99 latency value
-func (m *MockClient) GetLatencyP99(ctx context.Context, query string) (float64, error) {
+func (m *MockClient) GetLatencyP99(_ context.Context, _ string) (float64, error) {
 	return m.LatencyP99Value, m.Error
 }
 
 // GetLatencyP95 returns the mock P95 latency value
-func (m *MockClient) GetLatencyP95(ctx context.Context, query string) (float64, error) {
+func (m *MockClient) GetLatencyP95(_ context.Context, _ string) (float64, error) {
 	return m.LatencyP95Value, m.Error
 }
 
 // GetGPUUtilization returns the mock GPU utilization value
-func (m *MockClient) GetGPUUtilization(ctx context.Context, query string) (float64, error) {
+func (m *MockClient) GetGPUUtilization(_ context.Context, _ string) (float64, error) {
 	return m.GPUUtilizationValue, m.Error
 }
 
 // GetQueueDepth returns the mock queue depth value
-func (m *MockClient) GetQueueDepth(ctx context.Context, query string) (int64, error) {
+func (m *MockClient) GetQueueDepth(_ context.Context, _ string) (int64, error) {
 	return m.QueueDepthValue, m.Error
 }

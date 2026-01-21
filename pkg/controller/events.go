@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controller provides event recording utilities for the autoscaler.
 package controller
 
 import (
@@ -24,13 +25,18 @@ import (
 )
 
 const (
-	// Event reasons
-	ReasonScaledUp       = "ScaledUp"
-	ReasonScaledDown     = "ScaledDown"
-	ReasonScalingFailed  = "ScalingFailed"
-	ReasonMetricsFailed  = "MetricsFetchFailed"
+	// ReasonScaledUp indicates the target was scaled up.
+	ReasonScaledUp = "ScaledUp"
+	// ReasonScaledDown indicates the target was scaled down.
+	ReasonScaledDown = "ScaledDown"
+	// ReasonScalingFailed indicates scaling operation failed.
+	ReasonScalingFailed = "ScalingFailed"
+	// ReasonMetricsFailed indicates metrics fetch failed.
+	ReasonMetricsFailed = "MetricsFetchFailed"
+	// ReasonTargetNotFound indicates the scale target was not found.
 	ReasonTargetNotFound = "TargetNotFound"
-	ReasonCooldown       = "CooldownActive"
+	// ReasonCooldown indicates cooldown period is active.
+	ReasonCooldown = "CooldownActive"
 )
 
 // EventRecorder wraps the Kubernetes event recorder

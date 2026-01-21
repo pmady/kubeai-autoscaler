@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package webhook provides admission webhooks for the autoscaler CRDs.
 package webhook
 
 import (
@@ -108,7 +109,7 @@ func (w *AIInferenceAutoscalerPolicyWebhook) ValidateUpdate(ctx context.Context,
 }
 
 // ValidateDelete implements webhook.CustomValidator
-func (w *AIInferenceAutoscalerPolicyWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (w *AIInferenceAutoscalerPolicyWebhook) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	// No validation needed for delete
 	return nil, nil
 }

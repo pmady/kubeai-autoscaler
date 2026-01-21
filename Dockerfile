@@ -10,6 +10,7 @@ RUN go mod download
 # Copy source code
 COPY api/ api/
 COPY cmd/ cmd/
+COPY controller/ controller/
 COPY pkg/ pkg/
 
 # Build
