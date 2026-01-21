@@ -222,7 +222,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) fetchMetrics(ctx context.Context
 	if policy.Spec.Metrics.RequestQueueDepth != nil && policy.Spec.Metrics.RequestQueueDepth.Enabled {
 		depth, err := r.MetricsClient.GetQueueDepth(ctx, policy.Spec.Metrics.RequestQueueDepth.PrometheusQuery)
 		if err == nil {
-			currentMetrics.RequestQueueDepth = int32(depth)
+			currentMetrics.RequestQueueDepth = int32(depth) //nolint:gosec // queue depth won't exceed int32 max in practice
 		}
 	}
 

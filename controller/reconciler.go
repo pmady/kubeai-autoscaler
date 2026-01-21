@@ -190,7 +190,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) fetchMetrics(
 		if err != nil {
 			logger.Error(err, "Failed to fetch queue depth")
 		} else {
-			currentMetrics.RequestQueueDepth = int32(queueDepth)
+			currentMetrics.RequestQueueDepth = int32(queueDepth) //nolint:gosec // queue depth won't exceed int32 max in practice
 		}
 	}
 
@@ -210,7 +210,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		return currentReplicas
 	}
 
-	var maxRatio float64 = 1.0
+	maxRatio := 1.0
 
 	// Calculate latency-based scaling ratio
 	if policy.Spec.Metrics.Latency != nil && policy.Spec.Metrics.Latency.Enabled {

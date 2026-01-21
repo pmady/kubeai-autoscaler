@@ -20,36 +20,36 @@ import (
 	"testing"
 )
 
-func TestRecordScalingDecision(t *testing.T) {
+func TestRecordScalingDecision(_ *testing.T) {
 	// Test that recording doesn't panic
 	RecordScalingDecision("default", "test-policy", "up")
 	RecordScalingDecision("default", "test-policy", "down")
 	RecordScalingDecision("default", "test-policy", "none")
 }
 
-func TestRecordReplicaCounts(t *testing.T) {
+func TestRecordReplicaCounts(_ *testing.T) {
 	RecordReplicaCounts("default", "test-policy", "test-deployment", 2, 4)
 }
 
-func TestRecordMetricValues(t *testing.T) {
+func TestRecordMetricValues(_ *testing.T) {
 	RecordMetricValues("default", "test-policy", "latency_p99", 500.0, 300.0)
 	RecordMetricValues("default", "test-policy", "gpu_utilization", 85.0, 80.0)
 }
 
-func TestRecordReconcileLatency(t *testing.T) {
+func TestRecordReconcileLatency(_ *testing.T) {
 	RecordReconcileLatency("default", "test-policy", 0.5)
 }
 
-func TestRecordReconcileError(t *testing.T) {
+func TestRecordReconcileError(_ *testing.T) {
 	RecordReconcileError("default", "test-policy", "metrics_fetch")
 	RecordReconcileError("default", "test-policy", "target_not_found")
 }
 
-func TestRecordCooldownStatus(t *testing.T) {
+func TestRecordCooldownStatus(_ *testing.T) {
 	RecordCooldownStatus("default", "test-policy", true)
 	RecordCooldownStatus("default", "test-policy", false)
 }
 
-func TestRecordLastScaleTime(t *testing.T) {
+func TestRecordLastScaleTime(_ *testing.T) {
 	RecordLastScaleTime("default", "test-policy", 1703123456.0)
 }

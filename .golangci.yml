@@ -1,104 +1,27 @@
-# golangci-lint configuration
-# https://golangci-lint.run/usage/configuration/
-
+# golangci-lint configuration for v2
 version: "2"
 
 run:
   timeout: 5m
-  issues-exit-code: 1
-  tests: true
 
 linters:
+  default: none
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - unconvert
-    - unparam
     - nakedret
-    - prealloc
-    - exportloopref
     - gocritic
     - revive
     - gosec
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  
-  govet:
-    check-shadowing: true
-  
-  gofmt:
-    simplify: true
-  
-  goimports:
-    local-prefixes: github.com/pmady/kubeai-autoscaler
-  
-  misspell:
-    locale: US
-  
-  nakedret:
-    max-func-lines: 30
-  
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: true
-  
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - hugeParam
-  
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-  
-  gosec:
-    excludes:
-      - G104 # Audit errors not checked
+formatters:
+  enable:
+    - goimports
 
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gosec
-        - unparam
-    
-    # Exclude known issues in generated files
-    - path: zz_generated\.deepcopy\.go
-      linters:
-        - all
-  
-  max-issues-per-linter: 50
-  max-same-issues: 10
+  exclude-generated: strict

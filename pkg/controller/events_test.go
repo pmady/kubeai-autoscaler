@@ -25,7 +25,7 @@ import (
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 )
 
-func TestEventRecorderNilSafe(t *testing.T) {
+func TestEventRecorderNilSafe(_ *testing.T) {
 	// Test that EventRecorder methods don't panic with nil recorder
 	recorder := NewEventRecorder(nil)
 

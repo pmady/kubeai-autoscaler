@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /workspace
 
@@ -10,6 +10,7 @@ RUN go mod download
 # Copy source code
 COPY api/ api/
 COPY cmd/ cmd/
+COPY controller/ controller/
 COPY pkg/ pkg/
 
 # Build
