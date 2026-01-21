@@ -210,7 +210,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		return currentReplicas
 	}
 
-	var maxRatio float64 = 1.0
+	maxRatio := 1.0
 
 	// Calculate latency-based scaling ratio
 	if policy.Spec.Metrics.Latency != nil && policy.Spec.Metrics.Latency.Enabled {
