@@ -119,8 +119,8 @@ spec:
 Custom algorithms are loaded as Go plugins (`.so` files) at controller startup. The plugin system:
 
 - Uses Go's native plugin package
-- Supports hot-loading from a configurable directory
-- Registers plugins automatically with the algorithm registry
+- Loads plugins once at controller startup from a configurable directory
+- Registers discovered plugins automatically with the algorithm registry
 
 ### Enabling Plugin Loading
 
