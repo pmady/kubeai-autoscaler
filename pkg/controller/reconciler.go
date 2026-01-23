@@ -288,9 +288,12 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		}
 	}
 
-	// If using WeightedRatio, set the weights
+	// If using WeightedRatio, set the weights on a per-request copy to avoid mutating shared instances
 	if weightedAlgo, ok := algorithm.(*scaling.WeightedRatioAlgorithm); ok && len(weights) > 0 {
-		weightedAlgo.SetWeights(weights)
+		algoCopy := *weightedAlgo
+		copyPtr := &algoCopy
+		copyPtr.SetWeights(weights)
+		algorithm = copyPtr
 	}
 
 	// Build metric ratios
