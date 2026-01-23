@@ -37,6 +37,8 @@ const (
 	ReasonTargetNotFound = "TargetNotFound"
 	// ReasonCooldown indicates cooldown period is active.
 	ReasonCooldown = "CooldownActive"
+	// ReasonUnknownAlgorithm indicates the specified algorithm is not registered.
+	ReasonUnknownAlgorithm = "UnknownAlgorithm"
 )
 
 // EventRecorder wraps the Kubernetes event recorder
@@ -107,4 +109,14 @@ func (e *EventRecorder) RecordCooldown(policy *kubeaiv1alpha1.AIInferenceAutosca
 	}
 	e.recorder.Eventf(policy, corev1.EventTypeNormal, ReasonCooldown,
 		"Scaling skipped, cooldown active for %d more seconds", remainingSeconds)
+}
+
+// RecordUnknownAlgorithm records a warning event when the specified algorithm is not found
+func (e *EventRecorder) RecordUnknownAlgorithm(policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy, requested, fallback string, available []string) {
+	if e.recorder == nil {
+		return
+	}
+	e.recorder.Eventf(policy, corev1.EventTypeWarning, ReasonUnknownAlgorithm,
+		"spec.algorithm.name=%q is not registered; falling back to %q. Available: %v",
+		requested, fallback, available)
 }

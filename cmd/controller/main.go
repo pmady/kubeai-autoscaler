@@ -32,6 +32,7 @@ import (
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 	"github.com/pmady/kubeai-autoscaler/pkg/controller"
 	"github.com/pmady/kubeai-autoscaler/pkg/metrics"
+	"github.com/pmady/kubeai-autoscaler/pkg/scaling"
 )
 
 var (
@@ -44,11 +45,28 @@ func init() {
 	utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
 }
 
+// stringListDiff returns elements in 'after' that are not in 'before' (set difference).
+func stringListDiff(before, after []string) []string {
+	beforeSet := make(map[string]struct{}, len(before))
+	for _, s := range before {
+		beforeSet[s] = struct{}{}
+	}
+
+	var diff []string
+	for _, s := range after {
+		if _, exists := beforeSet[s]; !exists {
+			diff = append(diff, s)
+		}
+	}
+	return diff
+}
+
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
 	var prometheusAddr string
+	var pluginDir string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -56,6 +74,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&prometheusAddr, "prometheus-address", "http://prometheus:9090", "The address of the Prometheus server.")
+	flag.StringVar(&pluginDir, "plugin-dir", "", "Directory containing custom algorithm plugins (.so files)")
 
 	opts := zap.Options{
 		Development: true,
@@ -79,6 +98,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load custom algorithm plugins
+	if pluginDir != "" {
+		setupLog.Info("loading custom algorithm plugins", "directory", pluginDir)
+		algorithmsBefore := scaling.List()
+		if err := scaling.LoadAndRegisterPlugins(pluginDir, scaling.DefaultRegistry); err != nil {
+			setupLog.Error(err, "failed to load some plugins, continuing with available algorithms")
+		}
+		algorithmsAfter := scaling.List()
+		addedByPlugins := stringListDiff(algorithmsBefore, algorithmsAfter)
+		setupLog.Info("algorithms added by plugins", "algorithms", addedByPlugins)
+		setupLog.Info("registered algorithms", "algorithms", algorithmsAfter)
+	}
+
 	// Create Prometheus metrics client
 	var metricsClient metrics.Client
 	if prometheusAddr != "" {
@@ -89,7 +121,8 @@ func main() {
 	}
 
 	// Setup reconciler
-	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient)
+	eventRecorder := controller.NewEventRecorder(mgr.GetEventRecorderFor("kubeai-autoscaler"))
+	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient, scaling.DefaultRegistry, eventRecorder)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
 		os.Exit(1)

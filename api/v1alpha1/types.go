@@ -59,6 +59,10 @@ type AIInferenceAutoscalerPolicySpec struct {
 	// Metrics configuration for scaling decisions
 	Metrics MetricsSpec `json:"metrics"`
 
+	// Algorithm specifies which scaling algorithm to use
+	// +optional
+	Algorithm *AlgorithmSpec `json:"algorithm,omitempty"`
+
 	// ScaleUp behavior configuration
 	// +optional
 	ScaleUp *ScaleBehavior `json:"scaleUp,omitempty"`
@@ -66,6 +70,24 @@ type AIInferenceAutoscalerPolicySpec struct {
 	// ScaleDown behavior configuration
 	// +optional
 	ScaleDown *ScaleBehavior `json:"scaleDown,omitempty"`
+}
+
+// AlgorithmSpec defines the scaling algorithm configuration
+type AlgorithmSpec struct {
+	// Name is the algorithm name (built-in: MaxRatio, AverageRatio, WeightedRatio, or custom)
+	// +kubebuilder:default="MaxRatio"
+	Name string `json:"name"`
+
+	// Tolerance is the percentage tolerance before scaling (e.g., 0.1 = 10%)
+	// +kubebuilder:default=0.1
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=1
+	// +optional
+	Tolerance float64 `json:"tolerance,omitempty"`
+
+	// Weights for WeightedRatio algorithm (optional, only used by WeightedRatio)
+	// +optional
+	Weights []float64 `json:"weights,omitempty"`
 }
 
 // TargetRef references the target resource to scale
@@ -185,6 +207,14 @@ type AIInferenceAutoscalerPolicyStatus struct {
 	// CurrentMetrics contains the current metric values
 	// +optional
 	CurrentMetrics *CurrentMetrics `json:"currentMetrics,omitempty"`
+
+	// LastAlgorithm is the algorithm used for the last scaling decision
+	// +optional
+	LastAlgorithm string `json:"lastAlgorithm,omitempty"`
+
+	// LastScaleReason is the reason for the last scaling decision
+	// +optional
+	LastScaleReason string `json:"lastScaleReason,omitempty"`
 
 	// Conditions represent the latest available observations
 	// +optional
