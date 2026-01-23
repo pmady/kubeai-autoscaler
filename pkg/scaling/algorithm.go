@@ -84,9 +84,6 @@ func (a *MaxRatioAlgorithm) Name() string {
 // ComputeScale implements the ScalingAlgorithm interface
 func (a *MaxRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
-	if tolerance == 0 {
-		tolerance = a.Tolerance
-	}
 
 	if len(input.MetricRatios) == 0 {
 		desiredReplicas := input.CurrentReplicas
@@ -197,9 +194,6 @@ func (a *AverageRatioAlgorithm) Name() string {
 // ComputeScale implements the ScalingAlgorithm interface
 func (a *AverageRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
-	if tolerance == 0 {
-		tolerance = a.Tolerance
-	}
 
 	if len(input.MetricRatios) == 0 {
 		desiredReplicas := input.CurrentReplicas
@@ -315,9 +309,6 @@ func (a *WeightedRatioAlgorithm) SetWeights(weights []float64) {
 // ComputeScale implements the ScalingAlgorithm interface
 func (a *WeightedRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
-	if tolerance == 0 {
-		tolerance = a.Tolerance
-	}
 
 	if len(input.MetricRatios) == 0 {
 		desiredReplicas := input.CurrentReplicas

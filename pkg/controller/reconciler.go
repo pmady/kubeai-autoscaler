@@ -260,9 +260,8 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		if policy.Spec.Algorithm.Name != "" {
 			algorithmName = policy.Spec.Algorithm.Name
 		}
-		if policy.Spec.Algorithm.Tolerance > 0 {
-			tolerance = policy.Spec.Algorithm.Tolerance
-		}
+		// Always honor the configured tolerance, including 0 (zero tolerance)
+		tolerance = policy.Spec.Algorithm.Tolerance
 		weights = policy.Spec.Algorithm.Weights
 	}
 
