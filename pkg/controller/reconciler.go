@@ -40,6 +40,8 @@ const (
 	ConditionTypeReady = "Ready"
 	// ConditionTypeScaling indicates scaling is in progress
 	ConditionTypeScaling = "Scaling"
+	// ConditionTypeAlgorithmValid indicates the configured algorithm is valid
+	ConditionTypeAlgorithmValid = "AlgorithmValid"
 	// DefaultCooldownPeriod is the default cooldown between scaling events
 	DefaultCooldownPeriod = 300 * time.Second
 	// DefaultRequeueInterval is the default requeue interval
@@ -55,15 +57,16 @@ const DefaultTolerance = 0.1
 // AIInferenceAutoscalerPolicyReconciler reconciles AIInferenceAutoscalerPolicy objects
 type AIInferenceAutoscalerPolicyReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	MetricsClient    metrics.Client
+	Scheme            *runtime.Scheme
+	MetricsClient     metrics.Client
 	AlgorithmRegistry *scaling.Registry
-	LastScaleTime    map[string]time.Time
-	CooldownPeriod   time.Duration
+	EventRecorder     *EventRecorder
+	LastScaleTime     map[string]time.Time
+	CooldownPeriod    time.Duration
 }
 
 // NewReconciler creates a new reconciler
-func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient metrics.Client, registry *scaling.Registry) *AIInferenceAutoscalerPolicyReconciler {
+func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient metrics.Client, registry *scaling.Registry, eventRecorder *EventRecorder) *AIInferenceAutoscalerPolicyReconciler {
 	if registry == nil {
 		registry = scaling.DefaultRegistry
 	}
@@ -72,6 +75,7 @@ func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient m
 		Scheme:            scheme,
 		MetricsClient:     metricsClient,
 		AlgorithmRegistry: registry,
+		EventRecorder:     eventRecorder,
 		LastScaleTime:     make(map[string]time.Time),
 		CooldownPeriod:    DefaultCooldownPeriod,
 	}
@@ -82,6 +86,7 @@ func NewReconciler(client client.Client, scheme *runtime.Scheme, metricsClient m
 // +kubebuilder:rbac:groups=kubeai.io,resources=aiinferenceautoscalerpolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation loop for AIInferenceAutoscalerPolicy
 func (r *AIInferenceAutoscalerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -119,7 +124,25 @@ func (r *AIInferenceAutoscalerPolicyReconciler) Reconcile(ctx context.Context, r
 	}
 
 	// Calculate desired replicas
-	desiredReplicas, algorithmUsed, scaleReason := r.calculateDesiredReplicas(ctx, policy, currentReplicas, currentMetrics)
+	desiredReplicas, algorithmUsed, scaleReason, algorithmNotFound, requestedAlgoName := r.calculateDesiredReplicas(ctx, policy, currentReplicas, currentMetrics)
+
+	// Handle algorithm validity feedback
+	if requestedAlgoName != "" {
+		if algorithmNotFound {
+			// Only emit event if condition is transitioning (prevent spam)
+			if !r.hasCondition(policy, ConditionTypeAlgorithmValid, metav1.ConditionFalse, ReasonUnknownAlgorithm) {
+				if r.EventRecorder != nil {
+					r.EventRecorder.RecordUnknownAlgorithm(policy, requestedAlgoName, algorithmUsed, r.AlgorithmRegistry.List())
+				}
+			}
+			r.updateCondition(ctx, policy, ConditionTypeAlgorithmValid, metav1.ConditionFalse,
+				ReasonUnknownAlgorithm,
+				fmt.Sprintf("Algorithm %q not found, using fallback %q", requestedAlgoName, algorithmUsed))
+		} else {
+			r.updateCondition(ctx, policy, ConditionTypeAlgorithmValid, metav1.ConditionTrue,
+				"AlgorithmFound", fmt.Sprintf("Using algorithm %q", algorithmUsed))
+		}
+	}
 
 	// Check cooldown period
 	policyKey := fmt.Sprintf("%s/%s", policy.Namespace, policy.Name)
@@ -242,13 +265,19 @@ func (r *AIInferenceAutoscalerPolicyReconciler) fetchMetrics(ctx context.Context
 	return currentMetrics, nil
 }
 
-// calculateDesiredReplicas computes the desired replica count based on metrics
+// calculateDesiredReplicas computes the desired replica count based on metrics.
+// Returns:
+//   - desiredReplicas: the computed replica count
+//   - algorithmUsed: the name of the algorithm that was actually used
+//   - reason: explanation of the scaling decision
+//   - requestedAlgorithmNotFound: true if the user-specified algorithm was not found
+//   - requestedName: the algorithm name the user specified (empty if none specified)
 func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	ctx context.Context,
 	policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy,
 	currentReplicas int32,
 	currentMetrics *kubeaiv1alpha1.CurrentMetrics,
-) (int32, string, string) {
+) (desiredReplicas int32, algorithmUsed string, reason string, requestedAlgorithmNotFound bool, requestedName string) {
 	logger := log.FromContext(ctx)
 
 	// Determine which algorithm to use
@@ -258,6 +287,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 
 	if policy.Spec.Algorithm != nil {
 		if policy.Spec.Algorithm.Name != "" {
+			requestedName = policy.Spec.Algorithm.Name
 			algorithmName = policy.Spec.Algorithm.Name
 		}
 		// Always honor the configured tolerance, including 0 (zero tolerance)
@@ -269,6 +299,11 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	algorithm, err := r.AlgorithmRegistry.Get(algorithmName)
 	if err != nil {
 		logger.Error(err, "Algorithm not found, falling back to default", "algorithm", algorithmName)
+
+		// Only flag as not found if user explicitly specified an algorithm
+		if requestedName != "" {
+			requestedAlgorithmNotFound = true
+		}
 
 		// Try the default algorithm in the configured registry first.
 		algorithmName = DefaultAlgorithmName
@@ -283,7 +318,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		// If we still don't have a valid algorithm, keep the current replicas to avoid a panic.
 		if err != nil || algorithm == nil {
 			logger.Error(err, "No valid scaling algorithm available, keeping current replicas", "algorithm", algorithmName)
-			return currentReplicas, algorithmName, "no algorithm available"
+			return currentReplicas, algorithmName, "no algorithm available", requestedAlgorithmNotFound, requestedName
 		}
 	}
 
@@ -320,7 +355,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	result, err := algorithm.ComputeScale(ctx, input)
 	if err != nil {
 		logger.Error(err, "Algorithm computation failed, keeping current replicas", "algorithm", algorithmName)
-		return currentReplicas, algorithmName, "computation failed"
+		return currentReplicas, algorithmName, "computation failed", requestedAlgorithmNotFound, requestedName
 	}
 
 	logger.Info("Calculated desired replicas",
@@ -332,7 +367,7 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		"min", minReplicas,
 		"max", maxReplicas)
 
-	return result.DesiredReplicas, algorithmName, result.Reason
+	return result.DesiredReplicas, algorithmName, result.Reason, requestedAlgorithmNotFound, requestedName
 }
 
 // buildMetricRatios builds the list of metric ratios from current metrics
@@ -458,6 +493,21 @@ func (r *AIInferenceAutoscalerPolicyReconciler) updateCondition(
 	if err := r.Status().Update(ctx, policy); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update condition")
 	}
+}
+
+// hasCondition checks if the policy already has a condition with the specified type, status, and reason
+func (r *AIInferenceAutoscalerPolicyReconciler) hasCondition(
+	policy *kubeaiv1alpha1.AIInferenceAutoscalerPolicy,
+	conditionType string,
+	status metav1.ConditionStatus,
+	reason string,
+) bool {
+	for _, c := range policy.Status.Conditions {
+		if c.Type == conditionType && c.Status == status && c.Reason == reason {
+			return true
+		}
+	}
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager

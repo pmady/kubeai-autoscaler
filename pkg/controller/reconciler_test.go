@@ -30,12 +30,14 @@ import (
 
 func TestCalculateDesiredReplicas(t *testing.T) {
 	tests := []struct {
-		name              string
-		policy            *kubeaiv1alpha1.AIInferenceAutoscalerPolicy
-		currentReplicas   int32
-		currentMetrics    *kubeaiv1alpha1.CurrentMetrics
-		expected          int32
-		expectedAlgorithm string
+		name                            string
+		policy                          *kubeaiv1alpha1.AIInferenceAutoscalerPolicy
+		currentReplicas                 int32
+		currentMetrics                  *kubeaiv1alpha1.CurrentMetrics
+		expected                        int32
+		expectedAlgorithm               string
+		expectedRequestedAlgoNotFound   bool
+		expectedRequestedName           string
 	}{
 		{
 			name: "scale up based on latency",
@@ -51,10 +53,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   2,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
-			expected:          4,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 2,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
+			expected:                        4,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "scale up based on GPU utilization",
@@ -70,10 +74,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   2,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{GPUUtilizationPercent: 100},
-			expected:          4,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 2,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{GPUUtilizationPercent: 100},
+			expected:                        4,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "respect max replicas",
@@ -89,10 +95,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   3,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 500},
-			expected:          5,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 3,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 500},
+			expected:                        5,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "respect min replicas",
@@ -108,10 +116,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   1,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
-			expected:          2,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 1,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
+			expected:                        2,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "no scaling when at target",
@@ -127,10 +137,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   3,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
-			expected:          3,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 3,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 100},
+			expected:                        3,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "use highest ratio from multiple metrics",
@@ -150,10 +162,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   2,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 150, GPUUtilizationPercent: 150},
-			expected:          6,
-			expectedAlgorithm: "MaxRatio",
+			currentReplicas:                 2,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 150, GPUUtilizationPercent: 150},
+			expected:                        6,
+			expectedAlgorithm:               "MaxRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "",
 		},
 		{
 			name: "use AverageRatio algorithm",
@@ -177,10 +191,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   2,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200, GPUUtilizationPercent: 100},
-			expected:          4, // avg of 2.0 and 2.0 = 2.0, 2 * 2.0 = 4
-			expectedAlgorithm: "AverageRatio",
+			currentReplicas:                 2,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200, GPUUtilizationPercent: 100},
+			expected:                        4, // avg of 2.0 and 2.0 = 2.0, 2 * 2.0 = 4
+			expectedAlgorithm:               "AverageRatio",
+			expectedRequestedAlgoNotFound:   false,
+			expectedRequestedName:           "AverageRatio",
 		},
 		{
 			name: "fallback to MaxRatio for unknown algorithm",
@@ -199,10 +215,12 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 					},
 				},
 			},
-			currentReplicas:   2,
-			currentMetrics:    &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
-			expected:          4,
-			expectedAlgorithm: "MaxRatio", // Falls back
+			currentReplicas:                 2,
+			currentMetrics:                  &kubeaiv1alpha1.CurrentMetrics{LatencyP99Ms: 200},
+			expected:                        4,
+			expectedAlgorithm:               "MaxRatio", // Falls back
+			expectedRequestedAlgoNotFound:   true,
+			expectedRequestedName:           "NonExistentAlgorithm",
 		},
 	}
 
@@ -213,9 +231,11 @@ func TestCalculateDesiredReplicas(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			result, algorithmUsed, _ := r.calculateDesiredReplicas(ctx, tt.policy, tt.currentReplicas, tt.currentMetrics)
+			result, algorithmUsed, _, requestedAlgoNotFound, requestedName := r.calculateDesiredReplicas(ctx, tt.policy, tt.currentReplicas, tt.currentMetrics)
 			assert.Equal(t, tt.expected, result)
 			assert.Equal(t, tt.expectedAlgorithm, algorithmUsed)
+			assert.Equal(t, tt.expectedRequestedAlgoNotFound, requestedAlgoNotFound)
+			assert.Equal(t, tt.expectedRequestedName, requestedName)
 		})
 	}
 }

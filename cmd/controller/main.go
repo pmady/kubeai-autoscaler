@@ -121,7 +121,8 @@ func main() {
 	}
 
 	// Setup reconciler
-	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient, scaling.DefaultRegistry)
+	eventRecorder := controller.NewEventRecorder(mgr.GetEventRecorderFor("kubeai-autoscaler"))
+	reconciler := controller.NewReconciler(mgr.GetClient(), mgr.GetScheme(), metricsClient, scaling.DefaultRegistry, eventRecorder)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AIInferenceAutoscalerPolicy")
 		os.Exit(1)

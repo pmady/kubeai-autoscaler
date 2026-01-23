@@ -18,9 +18,12 @@ package controller
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 
 	kubeaiv1alpha1 "github.com/pmady/kubeai-autoscaler/api/v1alpha1"
 )
@@ -49,4 +52,35 @@ func TestEventRecorderNilSafe(_ *testing.T) {
 	recorder.RecordMetricsFailed(policy, errors.New("test error"))
 	recorder.RecordTargetNotFound(policy, errors.New("test error"))
 	recorder.RecordCooldown(policy, 60)
+	recorder.RecordUnknownAlgorithm(policy, "CustomAlgo", "MaxRatio", []string{"MaxRatio", "AverageRatio"})
+}
+
+func TestRecordUnknownAlgorithm(t *testing.T) {
+	fakeRecorder := record.NewFakeRecorder(10)
+	recorder := NewEventRecorder(fakeRecorder)
+
+	policy := &kubeaiv1alpha1.AIInferenceAutoscalerPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-policy",
+			Namespace: "default",
+		},
+		Spec: kubeaiv1alpha1.AIInferenceAutoscalerPolicySpec{
+			TargetRef: kubeaiv1alpha1.TargetRef{
+				Kind: "Deployment",
+				Name: "test-deployment",
+			},
+		},
+	}
+
+	recorder.RecordUnknownAlgorithm(policy, "CustomAlgo", "MaxRatio", []string{"MaxRatio", "AverageRatio"})
+
+	select {
+	case event := <-fakeRecorder.Events:
+		assert.True(t, strings.Contains(event, "Warning"), "Event should be a Warning")
+		assert.True(t, strings.Contains(event, "UnknownAlgorithm"), "Event should have reason UnknownAlgorithm")
+		assert.True(t, strings.Contains(event, "CustomAlgo"), "Event should contain requested algorithm name")
+		assert.True(t, strings.Contains(event, "MaxRatio"), "Event should contain fallback algorithm name")
+	default:
+		t.Fatal("Expected an event to be recorded")
+	}
 }
