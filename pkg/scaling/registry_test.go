@@ -92,6 +92,18 @@ func TestRegistry_DuplicateRegistration(t *testing.T) {
 	assert.Equal(t, "DupeAlgo", duplicateErr.Name)
 }
 
+func TestRegistry_InvalidAlgorithmName(t *testing.T) {
+	r := NewRegistry()
+
+	algo := &mockAlgorithm{name: "   "}
+
+	err := r.Register(algo)
+	require.Error(t, err)
+
+	var invalidNameErr ErrInvalidAlgorithmName
+	assert.ErrorAs(t, err, &invalidNameErr)
+}
+
 func TestRegistry_Get(t *testing.T) {
 	r := NewRegistry()
 	algo := &mockAlgorithm{name: "GetAlgo"}

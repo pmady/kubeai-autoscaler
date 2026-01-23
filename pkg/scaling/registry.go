@@ -19,6 +19,7 @@ package scaling
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -38,6 +39,12 @@ type ErrAlgorithmAlreadyRegistered struct {
 
 func (e ErrAlgorithmAlreadyRegistered) Error() string {
 	return fmt.Sprintf("algorithm already registered: name=%q", e.Name)
+}
+
+type ErrInvalidAlgorithmName struct{}
+
+func (e ErrInvalidAlgorithmName) Error() string {
+	return "algorithm name must be non-empty"
 }
 
 // Registry manages scaling algorithms
@@ -60,13 +67,16 @@ func (r *Registry) Register(algorithm ScalingAlgorithm) error {
 		return fmt.Errorf("cannot register nil algorithm")
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	name := algorithm.Name()
+	name := strings.TrimSpace(algorithm.Name())
+	if name == "" {
+		return ErrInvalidAlgorithmName{}
+	}
 	if _, exists := r.algorithms[name]; exists {
 		return ErrAlgorithmAlreadyRegistered{Name: name}
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	r.algorithms[name] = algorithm
 	return nil
