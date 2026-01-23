@@ -18,10 +18,9 @@ linters:
     - gocritic
     - revive
     - gosec
+  exclusions:
+    generated: strict
 
 formatters:
   enable:
     - goimports
-
-issues:
-  exclude-generated: strict
