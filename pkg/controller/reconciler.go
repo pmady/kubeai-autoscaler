@@ -269,9 +269,23 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 	// Get the algorithm from registry
 	algorithm, err := r.AlgorithmRegistry.Get(algorithmName)
 	if err != nil {
-		logger.Error(err, "Algorithm not found, falling back to MaxRatio", "algorithm", algorithmName)
-		algorithm, _ = r.AlgorithmRegistry.Get(DefaultAlgorithmName)
+		logger.Error(err, "Algorithm not found, falling back to default", "algorithm", algorithmName)
+
+		// Try the default algorithm in the configured registry first.
 		algorithmName = DefaultAlgorithmName
+		algorithm, err = r.AlgorithmRegistry.Get(DefaultAlgorithmName)
+		if err != nil {
+			logger.Error(err, "Default algorithm not found in custom registry, trying global default registry", "algorithm", DefaultAlgorithmName)
+
+			// As a final fallback, try the global default registry.
+			algorithm, err = scaling.DefaultRegistry.Get(DefaultAlgorithmName)
+		}
+
+		// If we still don't have a valid algorithm, keep the current replicas to avoid a panic.
+		if err != nil || algorithm == nil {
+			logger.Error(err, "No valid scaling algorithm available, keeping current replicas", "algorithm", algorithmName)
+			return currentReplicas, algorithmName, "no algorithm available"
+		}
 	}
 
 	// If using WeightedRatio, set the weights
