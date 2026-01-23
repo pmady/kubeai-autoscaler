@@ -296,6 +296,8 @@ func (r *AIInferenceAutoscalerPolicyReconciler) calculateDesiredReplicas(
 		MaxReplicas:     maxReplicas,
 		MetricRatios:    metricRatios,
 		Tolerance:       tolerance,
+		PolicyName:      policy.Name,
+		PolicyNamespace: policy.Namespace,
 	}
 
 	// Compute scale using the algorithm

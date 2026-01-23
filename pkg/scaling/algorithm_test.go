@@ -205,6 +205,8 @@ func TestMaxRatioAlgorithm_ComputeScale(t *testing.T) {
 				MaxReplicas:     10,
 				MetricRatios:    []float64{1.5, 2.0, 1.2},
 				Tolerance:       0.1,
+				PolicyName:      "test-policy",
+				PolicyNamespace: "test-namespace",
 			},
 			expectedResult: 4,
 			expectedReason: "scaled based on max ratio",
@@ -217,6 +219,8 @@ func TestMaxRatioAlgorithm_ComputeScale(t *testing.T) {
 				MaxReplicas:     10,
 				MetricRatios:    []float64{},
 				Tolerance:       0.1,
+				PolicyName:      "test-policy",
+				PolicyNamespace: "test-namespace",
 			},
 			expectedResult: 3,
 			expectedReason: "no metrics available",
@@ -229,6 +233,8 @@ func TestMaxRatioAlgorithm_ComputeScale(t *testing.T) {
 				MaxReplicas:     10,
 				MetricRatios:    []float64{1.05, 0.95},
 				Tolerance:       0.1,
+				PolicyName:      "test-policy",
+				PolicyNamespace: "test-namespace",
 			},
 			expectedResult: 3,
 			expectedReason: "within tolerance",
@@ -255,6 +261,8 @@ func TestAverageRatioAlgorithm_ComputeScale(t *testing.T) {
 		MaxReplicas:     10,
 		MetricRatios:    []float64{2.0, 1.0, 1.5}, // avg = 1.5
 		Tolerance:       0.1,
+		PolicyName:      "test-policy",
+		PolicyNamespace: "test-namespace",
 	}
 
 	result, err := algo.ComputeScale(ctx, input)
@@ -273,6 +281,8 @@ func TestWeightedRatioAlgorithm_ComputeScale(t *testing.T) {
 		MaxReplicas:     10,
 		MetricRatios:    []float64{2.0, 1.0}, // weighted avg = (2*2 + 1*1) / 3 = 1.67
 		Tolerance:       0.1,
+		PolicyName:      "test-policy",
+		PolicyNamespace: "test-namespace",
 	}
 
 	result, err := algo.ComputeScale(ctx, input)
@@ -300,6 +310,8 @@ func TestScalingAlgorithm_ToleranceFromInput(t *testing.T) {
 		MaxReplicas:     10,
 		MetricRatios:    []float64{1.2}, // 20% above target
 		Tolerance:       0.1,            // Stricter tolerance from input
+		PolicyName:      "test-policy",
+		PolicyNamespace: "test-namespace",
 	}
 
 	result, err := algo.ComputeScale(ctx, input)

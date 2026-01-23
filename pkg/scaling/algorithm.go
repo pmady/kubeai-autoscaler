@@ -37,6 +37,9 @@ type ScalingInput struct {
 	MaxReplicas     int32
 	MetricRatios    []float64 // Ratios of current/target for each metric
 	Tolerance       float64
+	// Policy identity for stateful algorithms to generate stable per-policy keys
+	PolicyName      string
+	PolicyNamespace string // Empty string for cluster-scoped policies
 }
 
 // ScalingResult contains the output of a scaling calculation

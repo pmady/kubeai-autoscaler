@@ -137,10 +137,13 @@ func (a *CappedSmoothRatioAlgorithm) ComputeScale(ctx context.Context, input sca
 	}, nil
 }
 
-// policyKey generates a unique key for tracking smoothed values
+// policyKey generates a unique key for tracking smoothed values per policy.
+// Uses policy identity (namespace/name) as the primary key for stable state tracking.
 func policyKey(input scaling.ScalingInput) string {
-	// Simple key based on min/max replicas - in practice you might want more sophisticated keying
-	return string(rune(input.MinReplicas)) + "-" + string(rune(input.MaxReplicas))
+	if input.PolicyNamespace != "" {
+		return input.PolicyNamespace + "/" + input.PolicyName
+	}
+	return input.PolicyName
 }
 
 // Algorithm is the exported symbol that the plugin loader looks for.

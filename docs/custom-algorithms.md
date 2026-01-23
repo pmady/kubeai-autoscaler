@@ -194,6 +194,8 @@ type ScalingInput struct {
     MaxReplicas     int32     // Maximum replicas allowed
     MetricRatios    []float64 // Current/target ratios for each metric
     Tolerance       float64   // Configured tolerance
+    PolicyName      string    // Name of the scaling policy being evaluated
+    PolicyNamespace string    // Namespace of the policy (empty for cluster-scoped)
 }
 ```
 
