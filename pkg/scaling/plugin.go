@@ -105,8 +105,11 @@ func LoadPlugin(path string) (ScalingAlgorithm, error) {
 func LoadPlugins(dir string) ([]ScalingAlgorithm, error) {
 	// Check if directory exists
 	info, err := os.Stat(dir)
-	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("plugin directory not found: path=%q", dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("plugin directory not found: path=%q", dir)
+		}
+		return nil, fmt.Errorf("failed to stat plugin directory %q: %w", dir, err)
 	}
 	if !info.IsDir() {
 		return nil, fmt.Errorf("plugin path is not a directory: path=%q", dir)
