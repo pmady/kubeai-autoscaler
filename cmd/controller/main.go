@@ -45,6 +45,22 @@ func init() {
 	utilruntime.Must(kubeaiv1alpha1.AddToScheme(scheme))
 }
 
+// stringListDiff returns elements in 'after' that are not in 'before' (set difference).
+func stringListDiff(before, after []string) []string {
+	beforeSet := make(map[string]struct{}, len(before))
+	for _, s := range before {
+		beforeSet[s] = struct{}{}
+	}
+
+	var diff []string
+	for _, s := range after {
+		if _, exists := beforeSet[s]; !exists {
+			diff = append(diff, s)
+		}
+	}
+	return diff
+}
+
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
@@ -85,10 +101,14 @@ func main() {
 	// Load custom algorithm plugins
 	if pluginDir != "" {
 		setupLog.Info("loading custom algorithm plugins", "directory", pluginDir)
+		algorithmsBefore := scaling.List()
 		if err := scaling.LoadAndRegisterPlugins(pluginDir, scaling.DefaultRegistry); err != nil {
 			setupLog.Error(err, "failed to load some plugins, continuing with available algorithms")
 		}
-		setupLog.Info("registered algorithms", "algorithms", scaling.List())
+		algorithmsAfter := scaling.List()
+		addedByPlugins := stringListDiff(algorithmsBefore, algorithmsAfter)
+		setupLog.Info("algorithms added by plugins", "algorithms", addedByPlugins)
+		setupLog.Info("registered algorithms", "algorithms", algorithmsAfter)
 	}
 
 	// Create Prometheus metrics client
