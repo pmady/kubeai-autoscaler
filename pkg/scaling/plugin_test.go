@@ -40,7 +40,7 @@ func TestLoadPlugin_InvalidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	invalidPlugin := filepath.Join(tmpDir, "invalid.so")
 
-	err := os.WriteFile(invalidPlugin, []byte("not a plugin"), 0644)
+	err := os.WriteFile(invalidPlugin, []byte("not a plugin"), 0600) // #nosec G306
 	assert.NoError(t, err)
 
 	_, err = LoadPlugin(invalidPlugin)
@@ -62,7 +62,7 @@ func TestLoadPlugins_NotADirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "notadir")
 
-	err := os.WriteFile(tmpFile, []byte("file"), 0644)
+	err := os.WriteFile(tmpFile, []byte("file"), 0600) // #nosec G306
 	assert.NoError(t, err)
 
 	_, err = LoadPlugins(tmpFile)

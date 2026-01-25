@@ -320,7 +320,7 @@ func TestScalingAlgorithm_ToleranceFromInput(t *testing.T) {
 	assert.Equal(t, int32(3), result.DesiredReplicas)
 }
 
-func TestScalingAlgorithm_ImplementsInterface(t *testing.T) {
+func TestScalingAlgorithm_ImplementsInterface(_ *testing.T) {
 	// Verify all algorithms implement ScalingAlgorithm
 	var _ ScalingAlgorithm = (*MaxRatioAlgorithm)(nil)
 	var _ ScalingAlgorithm = (*AverageRatioAlgorithm)(nil)

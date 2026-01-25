@@ -41,6 +41,7 @@ func (e ErrAlgorithmAlreadyRegistered) Error() string {
 	return fmt.Sprintf("algorithm already registered: name=%q", e.Name)
 }
 
+// ErrInvalidAlgorithmName is returned when an algorithm name is empty
 type ErrInvalidAlgorithmName struct{}
 
 func (e ErrInvalidAlgorithmName) Error() string {
