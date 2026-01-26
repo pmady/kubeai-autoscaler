@@ -82,7 +82,7 @@ func (a *MaxRatioAlgorithm) Name() string {
 }
 
 // ComputeScale implements the ScalingAlgorithm interface
-func (a *MaxRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
+func (a *MaxRatioAlgorithm) ComputeScale(_ context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
 
 	if len(input.MetricRatios) == 0 {
@@ -192,7 +192,7 @@ func (a *AverageRatioAlgorithm) Name() string {
 }
 
 // ComputeScale implements the ScalingAlgorithm interface
-func (a *AverageRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
+func (a *AverageRatioAlgorithm) ComputeScale(_ context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
 
 	if len(input.MetricRatios) == 0 {
@@ -307,7 +307,7 @@ func (a *WeightedRatioAlgorithm) SetWeights(weights []float64) {
 }
 
 // ComputeScale implements the ScalingAlgorithm interface
-func (a *WeightedRatioAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
+func (a *WeightedRatioAlgorithm) ComputeScale(_ context.Context, input ScalingInput) (ScalingResult, error) {
 	tolerance := input.Tolerance
 
 	if len(input.MetricRatios) == 0 {

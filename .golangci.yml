@@ -20,6 +20,11 @@ linters:
     - gosec
   exclusions:
     generated: strict
+    rules:
+      - path: 'pkg/scaling/algorithm\.go'
+        text: 'type name will be used as scaling\.(ScalingAlgorithm|ScalingInput|ScalingResult)'
+        linters:
+          - revive
 
 formatters:
   enable:

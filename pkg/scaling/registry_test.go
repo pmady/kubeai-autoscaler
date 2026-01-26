@@ -34,7 +34,7 @@ func (m *mockAlgorithm) Name() string {
 	return m.name
 }
 
-func (m *mockAlgorithm) ComputeScale(ctx context.Context, input ScalingInput) (ScalingResult, error) {
+func (m *mockAlgorithm) ComputeScale(_ context.Context, input ScalingInput) (ScalingResult, error) {
 	return ScalingResult{
 		DesiredReplicas: input.CurrentReplicas,
 		Reason:          "mock",
@@ -110,9 +110,9 @@ func TestRegistry_Get(t *testing.T) {
 	require.NoError(t, r.Register(algo))
 
 	tests := []struct {
-		name    string
+		name     string
 		algoName string
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name:     "get existing algorithm",
