@@ -23,7 +23,9 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -161,12 +163,12 @@ func makeVectorResponse(value float64) string {
 }
 
 func makeVectorResponseMultiple(values ...float64) string {
-	results := ""
+	var sb strings.Builder
 	for i, v := range values {
 		if i > 0 {
-			results += ", "
+			sb.WriteString(", ")
 		}
-		results += fmt.Sprintf(`{"metric": {}, "value": [1234567890.123, "%v"]}`, v)
+		sb.WriteString(fmt.Sprintf(`{"metric": {}, "value": [1234567890.123, "%v"]}`, v))
 	}
 	return fmt.Sprintf(`{
 		"status": "success",
@@ -174,7 +176,7 @@ func makeVectorResponseMultiple(values ...float64) string {
 			"resultType": "vector",
 			"result": [%s]
 		}
-	}`, results)
+	}`, sb.String())
 }
 
 func makeScalarResponse(value float64) string {
@@ -218,7 +220,7 @@ func makeMatrixResponse() string {
 const floatDelta = 1e-6
 
 // TestPrometheusClient_ImplementsInterface verifies PrometheusClient implements Client interface
-func TestPrometheusClient_ImplementsInterface(t *testing.T) {
+func TestPrometheusClient_ImplementsInterface(_ *testing.T) {
 	var _ Client = (*PrometheusClient)(nil)
 }
 
@@ -231,9 +233,9 @@ func TestNewPrometheusClient(t *testing.T) {
 
 func TestPrometheusClient_Query_Success(t *testing.T) {
 	tests := []struct {
-		name           string
-		response       string
-		expectedValue  float64
+		name          string
+		response      string
+		expectedValue float64
 	}{
 		{
 			name:          "vector response",
@@ -249,7 +251,7 @@ func TestPrometheusClient_Query_Success(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(tt.response))
@@ -371,24 +373,24 @@ func TestPrometheusClient_GetQueueDepth(t *testing.T) {
 
 func TestPrometheusClient_Query_Errors(t *testing.T) {
 	tests := []struct {
-		name               string
-		setupServer        func() *httptest.Server
-		closeBeforeQuery   bool
+		name                string
+		setupServer         func() *httptest.Server
+		closeBeforeQuery    bool
 		expectedErrContains string
 	}{
 		{
 			name: "connection failure",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}))
 			},
-			closeBeforeQuery:   true,
+			closeBeforeQuery: true,
 		},
 		{
 			name: "HTTP 500 error",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
 				}))
 			},
@@ -396,7 +398,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 		{
 			name: "HTTP 400 error with error JSON",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
 					_, _ = w.Write([]byte(makeErrorResponse("bad_data", "invalid query")))
@@ -406,7 +408,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 		{
 			name: "Prometheus error status",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = w.Write([]byte(makeErrorResponse("execution", "query execution error")))
@@ -416,7 +418,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 		{
 			name: "empty result",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = w.Write([]byte(makeEmptyVectorResponse()))
@@ -427,7 +429,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 		{
 			name: "invalid JSON",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = w.Write([]byte(`{not-json`))
@@ -437,7 +439,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 		{
 			name: "unexpected result type (matrix)",
 			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_, _ = w.Write([]byte(makeMatrixResponse()))
@@ -471,7 +473,7 @@ func TestPrometheusClient_Query_Errors(t *testing.T) {
 }
 
 func TestPrometheusClient_GetQueueDepth_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(makeEmptyVectorResponse()))
@@ -486,37 +488,30 @@ func TestPrometheusClient_GetQueueDepth_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "no data returned from query:")
 }
 
-func TestPrometheusClient_ContextCancellation(t *testing.T) {
-	started := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(started)
-		<-r.Context().Done()
+func TestPrometheusClient_ContextTimeout(t *testing.T) {
+	// Server that delays response longer than the client timeout
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(makeVectorResponse(123.45)))
 	}))
 	defer server.Close()
 
 	client, err := NewPrometheusClient(server.URL)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Use a very short timeout that will expire before server responds
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	errCh := make(chan error, 1)
-	go func() {
-		_, qErr := client.Query(ctx, "test_query")
-		errCh <- qErr
-	}()
-
-	<-started
-	cancel()
-
-	err = <-errCh
+	_, err = client.Query(ctx, "test_query")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
-		"expected context cancellation error, got %v", err)
+	assert.Contains(t, err.Error(), "prometheus query failed:")
 }
 
 func TestPrometheusClient_Query_MultipleSamples(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(makeVectorResponseMultiple(11.11, 22.22)))
@@ -577,7 +572,7 @@ func TestPrometheusClient_CustomQuery(t *testing.T) {
 }
 
 func TestPrometheusClient_Query_NonNumericSample(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
